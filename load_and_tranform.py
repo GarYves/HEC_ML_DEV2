@@ -54,10 +54,9 @@ class DataCleaner:
     def _remove_old_contracts_on_roll_dates(self):
         # check for more than one contract per day
         self.df["date"] = pd.to_datetime(self.df["Date"]).dt.date
-        _df = self.df[["date","ContractName"]].drop_duplicates()
-        
+        _df = self.df[["date", "ContractName"]].drop_duplicates()
         roll_dates = _df.loc[_df.duplicated("date", keep=False)].date.unique()
-        vol_sums = df.groupby(["date", "ContractName"]).NbTrade.sum().to_frame().reset_index()
+        vol_sums = self.df.groupby(["date", "ContractName"]).NbTrade.sum().to_frame().reset_index()
         rolls = vol_sums.loc[vol_sums.date.isin(roll_dates), :].sort_values(["date", "NbTrade"])
         # remove the contract with the lowest number of trade 
         to_dump_on_roll_dates = rolls.groupby("date").apply(lambda x: x.loc[x["NbTrade"].idxmin()])
@@ -77,7 +76,7 @@ def bipower_variation(r):
 
 
 def subsample_apply(r, fun, n):
-    return np.mean([fun(r.iloc[k::n]) for k in range(n)])
+    return np.mean([fun(r.rolling(n, min_periods=n).sum().iloc[k::n]) for k in range(n)])
 
 
 def format_variances(variances):
@@ -87,7 +86,7 @@ def format_variances(variances):
     return variances
 
 
-INTERVALS = [1,2,3,4,5,6,7,8,9,10,15,20,30,45,60,90]
+INTERVALS = [1,2,3,4,5,6,7,8,9,10,15,20,30,45,60]
 YEARS = [1990, 2001, 2007, 2018]
 
 for YEAR in YEARS:
@@ -101,8 +100,8 @@ for YEAR in YEARS:
     # NAIVE
     for interval in INTERVALS:
         # using .iloc[0::interval] on each day is going to give us values at each interval
-        rv = gdf.apply(lambda x: realized_variance(x.iloc[0::interval].LogReturn))
-        bv = gdf.apply(lambda x: bipower_variation(x.iloc[0::interval].LogReturn))
+        rv = gdf.apply(lambda x: realized_variance(x.LogReturn.rolling(interval).sum().iloc[::interval]))
+        bv = gdf.apply(lambda x: bipower_variation(x.LogReturn.rolling(interval).sum().iloc[::interval]))
         ssj = np.maximum(rv - bv, 0)
         variances = pd.concat([rv, bv, ssj], axis=1)
         variances = format_variances(variances)
